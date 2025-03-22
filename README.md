@@ -42,8 +42,8 @@ hand-detection-landmarks/
 
 ### 1️⃣ Clone the Repository
 ```bash
-git clone https://github.com/yourusername/hand-detection-landmarks.git
-cd hand-detection-landmarks
+git clone https://github.com/uzayyildiztaskan/Hand-Detection-Landmarks
+cd Hand-Detection-Landmarks
 ```
 ### 2️⃣ Install Dependencies
 ```
