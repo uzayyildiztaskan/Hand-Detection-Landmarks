@@ -17,6 +17,7 @@ from sklearn.model_selection import train_test_split
 from data.preprocess import convert_to_2d
 from src.model.landmarkmodel import HandLandmarkModel
 import argparse
+import matplotlib as plt
 
 
 parser = argparse.ArgumentParser(description='Hand Detection Training Script')
@@ -35,6 +36,27 @@ def detection_loss(pred_bbox, true_bbox):
 
 def keypoint_loss(pred_keypoints, true_keypoints):
     return nn.MSELoss()(pred_keypoints, true_keypoints)
+
+def compute_iou(pred_boxes, true_boxes):
+    x1 = torch.max(pred_boxes[:, 0], true_boxes[:, 0])
+    y1 = torch.max(pred_boxes[:, 1], true_boxes[:, 1])
+    x2 = torch.min(pred_boxes[:, 2], true_boxes[:, 2])
+    y2 = torch.min(pred_boxes[:, 3], true_boxes[:, 3])
+    
+    inter_area = torch.clamp(x2 - x1, min=0) * torch.clamp(y2 - y1, min=0)
+    
+    pred_area = (pred_boxes[:, 2] - pred_boxes[:, 0]) * (pred_boxes[:, 3] - pred_boxes[:, 1])
+    true_area = (true_boxes[:, 2] - true_boxes[:, 0]) * (true_boxes[:, 3] - true_boxes[:, 1])
+    
+    union_area = pred_area + true_area - inter_area
+    
+    iou = inter_area / (union_area + 1e-6)
+    return iou.mean().item()
+
+def compute_pck(pred_keypoints, true_keypoints, threshold=0.05):
+    dists = torch.norm(pred_keypoints - true_keypoints, dim=2)
+    correct = (dists < threshold).float().mean().item()
+    return correct
 
 
 os.makedirs(hp.CHECKPOINT_DIR, exist_ok=True)
@@ -85,10 +107,16 @@ best_val_loss = float('inf')
 
 best_model_file = None
 
+train_losses, val_losses = [], []
+train_ious, val_ious = [], []
+train_pcks, val_pcks = [], []
+
 for epoch in range(EPOCHS):
     model.train()
     train_total_loss = 0
     pbar = tqdm(train_loader)
+    epoch_train_iou, epoch_train_pck = 0, 0
+
     for imgs, bboxes, keypoints in pbar:
         imgs, bboxes, keypoints = imgs.to(device), bboxes.to(device), keypoints.to(device)
         
@@ -103,13 +131,23 @@ for epoch in range(EPOCHS):
         optimizer.step()
         
         train_total_loss += loss.item()
-        pbar.set_description(f"Epoch {epoch+1}, Loss: {loss.item():.4f}")
-
+        epoch_train_iou += compute_iou(pred_bboxes, bboxes)
+        epoch_train_pck += compute_pck(pred_keypoints, keypoints)
+        
     avg_train_loss = train_total_loss / len(train_loader)
+    avg_train_iou = epoch_train_iou / len(train_loader)
+    avg_train_pck = epoch_train_pck / len(train_loader)
+
+    train_losses.append(avg_train_loss)
+    train_ious.append(avg_train_iou)
+    train_pcks.append(avg_train_pck)
+
 
     model.eval()
     val_total_loss = 0
     
+    epoch_val_iou, epoch_val_pck = 0, 0
+
     with torch.no_grad():
         for imgs, bboxes, keypoints in val_loader:
             imgs, bboxes, keypoints = imgs.to(device), bboxes.to(device), keypoints.to(device)
@@ -121,11 +159,21 @@ for epoch in range(EPOCHS):
             loss = ALPHA * loss_det + BETA * loss_kp
             
             val_total_loss += loss.item()
-    
+            epoch_val_iou += compute_iou(pred_bboxes, bboxes)
+            epoch_val_pck += compute_pck(pred_keypoints, keypoints)
+
     avg_val_loss = val_total_loss / len(val_loader)
-    
+    avg_val_iou = epoch_val_iou / len(val_loader)
+    avg_val_pck = epoch_val_pck / len(val_loader)
+
+    val_losses.append(avg_val_loss)
+    val_ious.append(avg_val_iou)
+    val_pcks.append(avg_val_pck)
+
     print(f"Epoch [{epoch+1}/{EPOCHS}] - Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
-    
+    print(f"Train IoU: {avg_train_iou:.4f}, Val IoU: {avg_val_iou:.4f}")
+    print(f"Train PCK: {avg_train_pck:.4f}, Val PCK: {avg_val_pck:.4f}")
+
     if avg_val_loss < best_val_loss:
         print(f"Validation loss improved! Saving checkpoint...")
         best_model_file = f"checkpoint_epoch_{epoch+1}.pt"
@@ -136,5 +184,38 @@ for epoch in range(EPOCHS):
             'val_loss': avg_val_loss
         }, os.path.join(CHECKPOINT_DIR, f'checkpoint_epoch_{epoch+1}.pt'))
         best_val_loss = avg_val_loss
+
+os.makedirs('outputs/plots', exist_ok=True)
+
+epochs_range = range(1, EPOCHS + 1)
+
+plt.figure()
+plt.plot(epochs_range, train_losses, label='Train Loss')
+plt.plot(epochs_range, val_losses, label='Val Loss')
+plt.legend()
+plt.xlabel('Epochs')
+plt.ylabel('Loss')
+plt.title('Training & Validation Loss')
+plt.savefig('outputs/plots/loss_plot.png')
+
+plt.figure()
+plt.plot(epochs_range, train_ious, label='Train IoU')
+plt.plot(epochs_range, val_ious, label='Val IoU')
+plt.legend()
+plt.xlabel('Epochs')
+plt.ylabel('IoU')
+plt.title('Training & Validation IoU')
+plt.savefig('outputs/plots/iou_plot.png')
+
+plt.figure()
+plt.plot(epochs_range, train_pcks, label='Train PCK')
+plt.plot(epochs_range, val_pcks, label='Val PCK')
+plt.legend()
+plt.xlabel('Epochs')
+plt.ylabel('PCK')
+plt.title('Training & Validation PCK')
+plt.savefig('outputs/plots/pck_plot.png')
+
+print("Plots saved to outputs/plots/")
     
 print(f"Best model: {best_model_file}")
