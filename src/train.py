@@ -1,3 +1,9 @@
+import sys
+import os
+
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.append(PROJECT_ROOT)
+
 import torch
 import torch.optim as optim
 from torch.utils.data import DataLoader
@@ -5,12 +11,24 @@ import torch.nn as nn
 from tqdm import tqdm
 from torchvision import transforms
 from data.freihanddataset import FreiHandDataset
-import config.params as hp
-import os
+from config.params import Config
 import numpy as np
 from sklearn.model_selection import train_test_split
 from data.preprocess import convert_to_2d
-from model.landmarkmodel import HandLandmarkModel
+from src.model.landmarkmodel import HandLandmarkModel
+import argparse
+
+
+parser = argparse.ArgumentParser(description='Hand Detection Training Script')
+
+hp = Config()
+
+parser.add_argument('--dataset_path', type=str, default=hp.DATASET_PATH, help='Path to RGB folder')
+parser.add_argument('--checkpoint_dir', type=str, default=hp.CHECKPOINT_DIR, help='Path to save checkpoints')
+
+args = parser.parse_args()
+
+hp.DATASET_PATH = args.dataset_path
 
 def detection_loss(pred_bbox, true_bbox):
     return nn.SmoothL1Loss()(pred_bbox, true_bbox)
@@ -22,7 +40,7 @@ def keypoint_loss(pred_keypoints, true_keypoints):
 os.makedirs(hp.CHECKPOINT_DIR, exist_ok=True)
 
 if not os.path.exists(hp.KEYPOINT_ANNOTATION_2D_PATH):
-    convert_to_2d()
+    convert_to_2d(hp)
 
 all_image_files = sorted(os.listdir(hp.RGB_FOLDER_PATH))
 all_keypoints = np.tile(np.load(hp.KEYPOINT_ANNOTATION_2D_PATH), (4, 1, 1))

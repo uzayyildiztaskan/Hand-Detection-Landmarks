@@ -1,13 +1,12 @@
 import json
 import numpy as np
-import config.params as hp
 from tqdm import tqdm
 
 ## This is a preprocessing script to convert 3D keypoint annotations to 2D annotations.
 ## This is done by normalizing the x,y coordinates of the keypoints by dividing them with the depth of the keypoints.
 ## Note: The dataset doesn't provide 2D x,y keypoints, instead only the 3D keypoints are available
 
-def convert_to_2d():
+def convert_to_2d(hp):
     
     with open(hp.KEYPOINT_ANNOTATION_3D_PATH) as f:
         xyz = np.array(json.load(f))
