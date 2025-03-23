@@ -58,12 +58,30 @@ Place files in:
 dataset/FreiHAND_pub_v2/
 ```
 ### 4️⃣ Train the Model
-```bash
-cd src
+```
 python -m src.train
 ```
 ### 5️⃣ Checkpoints & Validation
 Checkpoints are saved in ```/checkpoints/``` when validation loss improves. Configure validation split in ```config/params.py```.
+
+### 5️⃣ Inference
+After specifying ```IMAGE_PATH``` and ```CHECKPOINT_PATH``` in ```inference.py``` run the script by
+```
+python -m src.inference
+```
+
+![Sample image inference from dataset](https://github.com/uzayyildiztaskan/Hand-Detection-Landmarks/blob/main/inference_images/Figure_1.png)
+
+Infered model parameters:
+
+* Epochs: ```15```
+* Layers Unfreezed: ```6```
+* Train Loss: ```10.9017```, Val Loss: ```14.3914```
+* Train IoU: ```0.8973```, Val IoU: ```0.8919```
+* Train PCK: ```0.9942```, Val PCK: ```0.9826```
+* ALPHA: ```1.0```
+* BETA: ```1.0```
+* Margin of bounding box: ```0```
 
 ---
 
