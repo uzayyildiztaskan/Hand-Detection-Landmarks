@@ -19,7 +19,7 @@ from src.utils.losses.custom_loss_functions import detection_loss, keypoint_loss
 from src.utils.accuracy.custom_accuracies import compute_iou, compute_pck
 import argparse
 import matplotlib as plt
-from torch.optim.lr_scheduler import StepLR
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 
 parser = argparse.ArgumentParser(description='Hand Detection Training Script')
@@ -72,7 +72,7 @@ train_files, val_files, train_kps, val_kps = train_test_split(
 )
 
 transform = transforms.Compose([
-    transforms.Resize((256, 256)),
+    transforms.Resize((512, 512)),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
 ])
@@ -83,7 +83,7 @@ train_dataset = FreiHandDataset(
     keypoints=train_kps,
     transform=transform,
     original_size=(224, 224),
-    target_size=(256, 256)
+    target_size=(512, 512)
 )
 
 val_dataset = FreiHandDataset(
@@ -92,7 +92,7 @@ val_dataset = FreiHandDataset(
     keypoints=val_kps,
     transform=transform,
     original_size=(224, 224),
-    target_size=(256, 256)
+    target_size=(512, 512)
 )
 
 train_loader = DataLoader(train_dataset, batch_size=hp.BATCH_SIZE, shuffle=True)
@@ -106,7 +106,7 @@ for param in model.feature_extractor.parameters():
     param.requires_grad = False
 
 optimizer = optim.Adam(model.parameters(), lr=hp.LEARNING_RATE)
-scheduler = StepLR(optimizer, step_size=5, gamma=0.5)
+scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
 
 ALPHA = hp.ALPHA
 BETA = hp.BETA
@@ -124,7 +124,6 @@ train_pcks, val_pcks = [], []
 for epoch in range(EPOCHS):
 
     progressive_unfreeze(epoch, model, layers_per_step=2, start_epoch=3)
-    optimizer = get_optimizer(model)
 
     model.train()
     train_total_loss = 0
@@ -139,8 +138,8 @@ for epoch in range(EPOCHS):
         optimizer.zero_grad()
         pred_bboxes, pred_keypoints = model(imgs)
 
-        pred_bboxes_scaled = pred_bboxes * 256
-        pred_keypoints_scaled = pred_keypoints * 256
+        pred_bboxes_scaled = pred_bboxes * 512
+        pred_keypoints_scaled = pred_keypoints * 512
         
         loss_det = detection_loss(pred_bboxes_scaled, bboxes)
         loss_kp = keypoint_loss(pred_keypoints_scaled, keypoints)
@@ -155,7 +154,7 @@ for epoch in range(EPOCHS):
 
         debug_var += 1
 
-        if debug_var % 3256 == 0:
+        if debug_var % 3257 == 0:
             print("\n=======================\n", pred_bboxes_scaled[0])
             print("\n=======================\n", bboxes[0])
             print("\n=======================\n", pred_keypoints_scaled[0])
@@ -181,8 +180,8 @@ for epoch in range(EPOCHS):
             
             pred_bboxes, pred_keypoints = model(imgs)
 
-            pred_bboxes_scaled = pred_bboxes * 256
-            pred_keypoints_scaled = pred_keypoints * 256
+            pred_bboxes_scaled = pred_bboxes * 512
+            pred_keypoints_scaled = pred_keypoints * 512
             
             loss_det = detection_loss(pred_bboxes_scaled, bboxes)
             loss_kp = keypoint_loss(pred_keypoints_scaled, keypoints)
@@ -192,8 +191,6 @@ for epoch in range(EPOCHS):
             epoch_val_iou += compute_iou(pred_bboxes_scaled, bboxes)
             epoch_val_pck += compute_pck(pred_keypoints_scaled, keypoints)
 
-    scheduler.step()
-
     avg_val_loss = val_total_loss / len(val_loader)
     avg_val_iou = epoch_val_iou / len(val_loader)
     avg_val_pck = epoch_val_pck / len(val_loader)
@@ -201,6 +198,8 @@ for epoch in range(EPOCHS):
     val_losses.append(avg_val_loss)
     val_ious.append(avg_val_iou)
     val_pcks.append(avg_val_pck)
+
+    scheduler.step(avg_val_loss)
 
     print(f"Epoch [{epoch+1}/{EPOCHS}] - Train Loss: {avg_train_loss:.4f}, Val Loss: {avg_val_loss:.4f}")
     print(f"Train IoU: {avg_train_iou:.4f}, Val IoU: {avg_val_iou:.4f}")

@@ -34,7 +34,7 @@ class FreiHandDataset(Dataset):
         x_max = np.max(kp[:, 0])
         y_max = np.max(kp[:, 1])
         
-        margin = 0.05
+        margin = 1.0
         bbox = np.array([x_min - margin, y_min - margin, x_max + margin, y_max + margin], dtype=np.float32)     
 
         if self.transform:
