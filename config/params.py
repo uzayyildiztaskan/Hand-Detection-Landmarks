@@ -6,7 +6,7 @@ class Config:
                  batch_size=32,
                  learning_rate=1e-4,
                  alpha=1.0,
-                 beta=1.0):
+                 beta=2.0):
         
         self.EPOCHS = epochs
         self.BATCH_SIZE = batch_size
