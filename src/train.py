@@ -63,7 +63,7 @@ def get_optimizer(model):
     return optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=hp.LEARNING_RATE)
 
 
-def progressive_unfreeze(epoch, model, step=4, layers_per_step=1, start_epoch=3):
+def progressive_unfreeze(epoch, model, step=4, layers_per_step=1, start_epoch=3, total_layers_to_unfreeze = 6):
    
     if epoch < start_epoch or (epoch != 0 and epoch != start_epoch and (epoch - start_epoch) % step != 0):
         return
@@ -71,7 +71,7 @@ def progressive_unfreeze(epoch, model, step=4, layers_per_step=1, start_epoch=3)
     feature_layers = list(model.feature_extractor.children())
 
     count = 0
-    for i in reversed(range(len(feature_layers))):
+    for i in reversed(range(len(feature_layers) - total_layers_to_unfreeze, len(feature_layers))):
         layer = feature_layers[i]
         if any(not p.requires_grad for p in layer.parameters()):
             for param in layer.parameters():
