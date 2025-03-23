@@ -2,8 +2,8 @@ class Config:
     def __init__(self, 
                  dataset_path="dataset/FreiHAND_pub_v2", 
                  checkpoint_dir="outputs/checkpoints/",
-                 epochs=50,
-                 batch_size=16,
+                 epochs=30,
+                 batch_size=32,
                  learning_rate=1e-4,
                  alpha=1.0,
                  beta=1.0):
