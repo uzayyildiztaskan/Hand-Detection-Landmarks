@@ -17,23 +17,32 @@ A PyTorch-based deep learning project focused on detecting multiple hands in an 
 
 ## 🗂️ Project Structure
 ```
-hand-detection-landmarks/
-├── src/
-│   ├── data/
-│   │   └── freihand_dataset.py        # Custom Dataset class for FreiHAND
-│   ├── models/
-│   │   └── hand_landmark_model.py     # Model architecture definition
-│   ├── utils/
-│   │   └── preprocessing.py           # 3D to 2D keypoint projection, helpers
-│   ├── config/
-│   └── params.py                      # Hyperparameters & file paths
-│   ├── train.py                       # Training loop
-├── checkpoints/                       # Saved model checkpoints (not included)
-├── dataset/
-│   └── FreiHAND_pub_v2/               # Dataset folder (not included)
-├── LICENSE
-├── README.md
-└── requirements.txt
+.
+└── hand-detection-landmarks/
+    ├── config/
+    │   └── params
+    ├── data/
+    │   ├── freihanddataset.py                  # Custom Dataset class for FreiHAND
+    │   └── preprocess.py                       # Conversion of 3D keypoints to 2D
+    ├── dataset                                 # FreiHAND dataset (not included)
+    ├── inference_images                        # Output folder for inference images
+    ├── outputs/
+    │   ├── checkpoints                         # Saved checkpoints (not included)
+    │   └── plots                               # Saved plots from training (not included)
+    ├── src/
+    │   ├── model/
+    │   │   └── landmarkmodel.py                # Model architecture definition
+    │   ├── utils/
+    │   │   ├── accuracy/
+    │   │   │   └── custom_accuracies.py        # IoU and PCB for accuracy metrics
+    │   │   └── losses/
+    │   │       ├── custom_loss_functions.py    # SmoothL1 and WingLoss
+    │   │       └── wing_loss.py                # WingLoss class    
+    │   ├── inference.py
+    │   └── train.py
+    ├── LICENSE
+    ├── README.md
+    └── requirements.txt
 ```
 
 ---
