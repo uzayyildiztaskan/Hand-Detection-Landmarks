@@ -28,17 +28,16 @@ hp = Config()
 
 parser.add_argument('--dataset_path', type=str, default=hp.DATASET_PATH, help='Path to RGB folder')
 parser.add_argument('--checkpoint_dir', type=str, default=hp.CHECKPOINT_DIR, help='Path to save checkpoints')
+parser.add_argument('--saved_model_file', type=str, default=None, help='Path to saved model checkpoint file to resume training')
 
 args = parser.parse_args()
 
 hp.DATASET_PATH = args.dataset_path
+model_path = args.saved_model_file
+checkpoint = torch.load(model_path) if model_path else None
 
 
-def get_optimizer(model):
-    return optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=hp.LEARNING_RATE)
-
-
-def progressive_unfreeze(epoch, model, step=4, layers_per_step=1, start_epoch=3, total_layers_to_unfreeze = 6):
+def progressive_unfreeze(epoch, model, total_unfrozen_layers, step=4, layers_per_step=1, start_epoch=3, total_layers_to_unfreeze = 6):
    
     if epoch < start_epoch or (epoch != 0 and epoch != start_epoch and (epoch - start_epoch) % step != 0):
         return
@@ -56,7 +55,24 @@ def progressive_unfreeze(epoch, model, step=4, layers_per_step=1, start_epoch=3,
             break
     
     print(f"Epoch {epoch}: Unfroze {count} new layers in feature extractor.")
+    total_unfrozen_layers += count
+    return total_unfrozen_layers
 
+def initial_unfreeze(model, total_unfrozen_layers, total_layers_to_unfreeze = 6):
+
+    feature_layers = list(model.feature_extractor.children())
+
+    count = 0
+    for i in reversed(range(len(feature_layers) - total_layers_to_unfreeze, len(feature_layers))):
+        layer = feature_layers[i]
+        if any(not p.requires_grad for p in layer.parameters()):
+            for param in layer.parameters():
+                param.requires_grad = True
+            count += 1
+        if count >= total_unfrozen_layers:
+            break
+    
+    print(f"Unfroze {count} layers in feature extractor for initialization.")
 
 
 os.makedirs(hp.CHECKPOINT_DIR, exist_ok=True)
@@ -102,28 +118,40 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 model = HandLandmarkModel().to(device)
 
-for param in model.feature_extractor.parameters():
-    param.requires_grad = False
+if checkpoint:
+    model.load_state_dict(checkpoint['model_state_dict'])
+    total_unfrozen_layers = checkpoint['layers_unfrozen']
+    initial_unfreeze(model, total_unfrozen_layers)
+    optimizer = optim.Adam(model.parameters(), lr=hp.LEARNING_RATE)
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
+    scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
 
-optimizer = optim.Adam(model.parameters(), lr=hp.LEARNING_RATE)
-scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
+else:
+    total_unfrozen_layers = 0 
+    for param in model.feature_extractor.parameters():
+        param.requires_grad = False
+    optimizer = optim.Adam(model.parameters(), lr=hp.LEARNING_RATE)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
 
 ALPHA = hp.ALPHA
 BETA = hp.BETA
 EPOCHS = hp.EPOCHS
 CHECKPOINT_DIR = hp.CHECKPOINT_DIR
 
-best_val_loss = float('inf')
+best_val_loss = checkpoint['val_loss'] if checkpoint else float('inf')
 
-best_model_file = None
+best_model_file = model_path if checkpoint else None
 
 train_losses, val_losses = [], []
 train_ious, val_ious = [], []
 train_pcks, val_pcks = [], []
 
-for epoch in range(EPOCHS):
+start_epoch = checkpoint['epoch'] if checkpoint else 0
 
-    progressive_unfreeze(epoch, model, layers_per_step=2, start_epoch=3)
+for epoch in range(start_epoch, EPOCHS):
+
+    total_unfrozen_layers = progressive_unfreeze(epoch, model, total_unfrozen_layers, layers_per_step=2, start_epoch=3)
 
     model.train()
     train_total_loss = 0
@@ -154,7 +182,7 @@ for epoch in range(EPOCHS):
 
         debug_var += 1
 
-        if debug_var % 3257 == 0:
+        if debug_var % 3256 == 0:
             print("\n=======================\n", pred_bboxes_scaled[0])
             print("\n=======================\n", bboxes[0])
             print("\n=======================\n", pred_keypoints_scaled[0])
@@ -212,6 +240,8 @@ for epoch in range(EPOCHS):
             'epoch': epoch + 1,
             'model_state_dict': model.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict(),
+            'layers_unfrozen': total_unfrozen_layers,
             'val_loss': avg_val_loss
         }, os.path.join(CHECKPOINT_DIR, f'checkpoint_epoch_{epoch+1}.pt'))
         best_val_loss = avg_val_loss
