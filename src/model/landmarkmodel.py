@@ -9,6 +9,9 @@ class HandLandmarkModel(nn.Module):
         self.feature_extractor = nn.Sequential(*list(resnet.children())[:-1])
         self.out_features = resnet.fc.in_features
 
+        for param in self.feature_extractor.parameters():
+            param.requires_grad = False
+
         self.detection_head = nn.Sequential(
             nn.Linear(self.out_features, 256),
             nn.ReLU(),
