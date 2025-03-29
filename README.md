@@ -1,3 +1,8 @@
+<div style="background-color: rgba(255, 0, 0, 0.1); color: red; padding: 12px; text-align: center; font-weight: bold; border: 2px solid red; border-radius: 6px; font-size: 18px;">
+  ⚠️⚠️ <span style="color: black;">🔧 Currently Being Updated</span> ⚠️⚠️
+</div>
+
+
 # 🖐️ Hand Detection with Landmarks
 
 A PyTorch-based deep learning project focused on detecting multiple hands in an image and predicting precise landmark keypoints for each hand. This repository serves as a foundational module for gesture recognition, sign language translation, and human-computer interaction systems.
