@@ -14,6 +14,8 @@ from config.params import Config
 import numpy as np
 from sklearn.model_selection import train_test_split
 from data.preprocess import convert_to_2d
+from data.process_annotations import filter_annotations
+from data.dataset_download import download_filtered_dataset
 from src.model.landmarkmodel import HandLandmarkModel
 from src.utils.losses.custom_loss_functions import detection_loss, keypoint_loss
 from src.utils.accuracy.custom_accuracies import compute_iou, compute_pck
@@ -21,6 +23,7 @@ import argparse
 import matplotlib as plt
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 import torch.nn as nn
+import json
 
 
 def main():
@@ -29,14 +32,16 @@ def main():
 
     hp = Config()
 
-    parser.add_argument('--dataset_path', type=str, default=hp.DATASET_PATH, help='Path to RGB folder')
-    parser.add_argument('--checkpoint_dir', type=str, default=hp.CHECKPOINT_DIR, help='Path to save checkpoints')
+    parser.add_argument('--dataset_path', type=str, default=hp.DATASET_PATH, help='Path to the dataset folder')
+    parser.add_argument('--checkpoint_output_dir', type=str, default=hp.CHECKPOINT_DIR, help='Path to save checkpoints')
     parser.add_argument('--saved_model_file', type=str, default=None, help='Path to saved model checkpoint file to resume training')
 
     args = parser.parse_args()
 
     hp.DATASET_PATH = args.dataset_path
+    hp.CHECKPOINT_DIR = args.checkpoint_output_dir
     model_path = args.saved_model_file
+    
     checkpoint = torch.load(model_path) if model_path else None
 
 
@@ -81,10 +86,25 @@ def main():
 
     os.makedirs(hp.CHECKPOINT_DIR, exist_ok=True)
 
-    if not os.path.exists(hp.KEYPOINT_ANNOTATION_2D_PATH):
-        convert_to_2d(hp)
+    if not os.path.exists(hp.FILTERED_ANNOTATIONS_PATH):
+        filter_annotations(hp)
 
-    all_image_files = sorted(os.listdir(hp.RGB_FOLDER_PATH))
+    if not os.path.exists(hp.IMAGES_PATH):
+        download_filtered_dataset(hp)
+
+    with open(hp.FILTERED_ANNOTATIONS_PATH, 'r') as f:
+        full_data = json.load(f)
+
+    keys = list(full_data.keys())
+
+    hand_labels = [
+        int(full_data[k]["left_hand_valid"] or full_data[k]["right_hand_valid"])
+        for k in keys
+    ]
+
+    train_keys, val_keys = train_test_split(keys, test_size=0.2, random_state=42, stratify=hand_labels)
+
+    all_image_files = sorted(os.listdir(hp.IMAGES_PATH))
     all_keypoints = np.tile(np.load(hp.KEYPOINT_ANNOTATION_2D_PATH), (4, 1, 1))
 
     train_files, val_files, train_kps, val_kps = train_test_split(

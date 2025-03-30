@@ -1,6 +1,8 @@
+import os
+
 class Config:
     def __init__(self, 
-                 dataset_path="dataset/FreiHAND_pub_v2", 
+                 dataset_path="dataset/", 
                  checkpoint_dir="outputs/checkpoints/",
                  epochs=15,
                  batch_size=32,
@@ -19,18 +21,15 @@ class Config:
         
     
     @property
-    def RGB_FOLDER_PATH(self):
-        return f"{self.DATASET_PATH}/training/rgb"
+    def IMAGES_PATH(self):
+        return os.path.join(self.DATASET_PATH, "images")
     
     @property
-    def KEYPOINT_ANNOTATION_3D_PATH(self):
-        return f"{self.DATASET_PATH}/training_xyz.json"
+    def ANNOTATIONS_PATH(self):
+        return os.path.join(self.DATASET_PATH, "annotations", "coco.json")
     
     @property
-    def INTRINSIC_CAMERA_MATRIX_PATH(self):
-        return f"{self.DATASET_PATH}/training_K.json"
+    def FILTERED_ANNOTATIONS_PATH(self):
+        return os.path.join(self.DATASET_PATH, "annotations", "filtered_annotations.json")
     
-    @property
-    def KEYPOINT_ANNOTATION_2D_PATH(self):
-        return f"{self.DATASET_PATH}/training_kp2d.npy"
 
