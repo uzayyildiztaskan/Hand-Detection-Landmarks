@@ -32,10 +32,7 @@ class HandLandmarkModel(nn.Module):
             ConvBlock(128, 256, 3, 1, 1)
         )
 
-        self.prediction_head = nn.Sequential(
-            nn.Conv2d(256, self.output_channels, kernel_size=1),
-            nn.Sigmoid()
-        )
+        self.prediction_head = nn.Conv2d(256, self.output_channels, kernel_size=1)
 
     def forward(self, x):
         batch_size = x.size(0)
@@ -43,5 +40,11 @@ class HandLandmarkModel(nn.Module):
         x = self.backbone(x)                          # Shape: [B, 256, S, S] (e.g., [B, 256, 32, 32])
         x = self.prediction_head(x)                   # Shape: [B, output_channels, S, S]
         x = x.permute(0, 2, 3, 1)                     # Shape: [B, S, S, output_channels]
+
+
+        confidence = torch.sigmoid(x[..., 0:1])        # [B, S, S, 1]
+        rest = x[..., 1:]                              # [B, S, S, C-1]
+
+        x = torch.cat([confidence, rest], dim=-1)   
 
         return x  # Each cell contains: [confidence, cx, cy, w, h, keypoints...]

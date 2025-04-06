@@ -9,7 +9,6 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torchvision import transforms
-from data.wholebodydataset import FreiHandDataset
 from config.params import Config
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -19,6 +18,7 @@ from data.dataset_download import download_filtered_dataset
 from src.model.landmarkmodel import HandLandmarkModel
 from src.utils.losses.custom_loss_functions import detection_loss, keypoint_loss
 from src.utils.accuracy.custom_accuracies import compute_iou, compute_pck
+from data.wholebodydataset import COCOWholeBodyHandDataset
 import argparse
 import matplotlib as plt
 from torch.optim.lr_scheduler import ReduceLROnPlateau
@@ -117,7 +117,7 @@ def main():
         transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
     ])
 
-    train_dataset = FreiHandDataset(
+    train_dataset = COCOWholeBodyHandDataset(
         image_folder=hp.RGB_FOLDER_PATH,
         image_files=train_files,
         keypoints=train_kps,
@@ -126,7 +126,7 @@ def main():
         target_size=(512, 512)
     )
 
-    val_dataset = FreiHandDataset(
+    val_dataset = COCOWholeBodyHandDataset(
         image_folder=hp.RGB_FOLDER_PATH,
         image_files=val_files,
         keypoints=val_kps,
