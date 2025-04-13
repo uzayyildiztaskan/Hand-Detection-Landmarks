@@ -44,46 +44,6 @@ def main():
     
     checkpoint = torch.load(model_path) if model_path else None
 
-
-    def progressive_unfreeze(epoch, model, total_unfrozen_layers, step=4, start_epoch=3):
-    
-        if epoch < start_epoch or (epoch != 0 and epoch != start_epoch and (epoch - start_epoch) % step != 0):
-            return total_unfrozen_layers
-        
-        feature_layers = list(model.feature_extractor.children())
-
-        for i in reversed(range(len(feature_layers))):
-            layer = feature_layers[i]
-            if isinstance(layer, nn.Sequential):
-                for param in layer.parameters():
-                    param.requires_grad = True
-                break
-        
-        print(f"Epoch {epoch}: Unfroze 1 new layer in feature extractor.")
-        total_unfrozen_layers += 1
-        return total_unfrozen_layers
-
-    def initial_unfreeze(model, total_unfrozen_layers):
-
-        if total_unfrozen_layers == 0:            
-            print("Unfroze no layers in feature extractor for initialization.")
-            return
-
-        feature_layers = list(model.feature_extractor.children())
-
-        count = 0
-        for i in reversed(range(len(feature_layers), len(feature_layers))):
-            layer = feature_layers[i]
-            if isinstance(layer, nn.Sequential):
-                for param in layer.parameters():
-                    param.requires_grad = True
-                count += 1
-            if count >= total_unfrozen_layers:
-                break
-        
-        print(f"Unfroze {count} layers in feature extractor for initialization.")
-
-
     os.makedirs(hp.CHECKPOINT_DIR, exist_ok=True)
 
     if not os.path.exists(hp.FILTERED_ANNOTATIONS_PATH):
@@ -95,24 +55,11 @@ def main():
     with open(hp.FILTERED_ANNOTATIONS_PATH, 'r') as f:
         full_data = json.load(f)
 
-    image_files = [os.path.join(hp.DATASET_PATH, image_file) for image_file in list(full_data.keys())]
+    images = os.listdir(hp.IMAGES_PATH)
 
-    print(image_files)
-    return 
+    hand_labels = [int(full_data[os.path.splitext(image)[0]]['has_valid_hands']) for image in images]
 
-    hand_labels = [
-        int(full_data[k]["left_hand_valid"] or full_data[k]["right_hand_valid"])
-        for k in keys
-    ]
-
-    train_keys, val_keys = train_test_split(keys, test_size=0.2, random_state=42, stratify=hand_labels)
-
-    all_image_files = sorted(os.listdir(hp.IMAGES_PATH))
-    all_keypoints = np.tile(np.load(hp.KEYPOINT_ANNOTATION_2D_PATH), (4, 1, 1))
-
-    train_files, val_files, train_kps, val_kps = train_test_split(
-        all_image_files, all_keypoints, test_size=0.2, random_state=42
-    )
+    train_images, val_images = train_test_split(images, test_size=0.2, random_state=42, stratify=hand_labels)
 
     transform = transforms.Compose([
         transforms.Resize((512, 512)),
@@ -121,20 +68,16 @@ def main():
     ])
 
     train_dataset = COCOWholeBodyHandDataset(
-        image_folder=hp.RGB_FOLDER_PATH,
-        image_files=train_files,
-        keypoints=train_kps,
+        image_folder=hp.IMAGES_PATH,
+        image_files=train_images,
         transform=transform,
-        original_size=(224, 224),
         target_size=(512, 512)
     )
 
     val_dataset = COCOWholeBodyHandDataset(
-        image_folder=hp.RGB_FOLDER_PATH,
-        image_files=val_files,
-        keypoints=val_kps,
+        image_folder=hp.IMAGES_PATH,
+        image_files=val_images,
         transform=transform,
-        original_size=(224, 224),
         target_size=(512, 512)
     )
 
@@ -147,17 +90,12 @@ def main():
 
     if checkpoint:
         model.load_state_dict(checkpoint['model_state_dict'])
-        total_unfrozen_layers = checkpoint['layers_unfrozen']
-        initial_unfreeze(model, total_unfrozen_layers)
         optimizer = optim.Adam(model.parameters(), lr=hp.LEARNING_RATE)
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
         scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
 
     else:
-        total_unfrozen_layers = 0 
-        for param in model.feature_extractor.parameters():
-            param.requires_grad = False
         optimizer = optim.Adam(model.parameters(), lr=hp.LEARNING_RATE)
         scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
 
@@ -177,8 +115,6 @@ def main():
     start_epoch = checkpoint['epoch'] if checkpoint else 0
 
     for epoch in range(start_epoch, EPOCHS):
-
-        total_unfrozen_layers = progressive_unfreeze(epoch, model, total_unfrozen_layers, start_epoch=3)
 
         model.train()
         train_total_loss = 0
@@ -268,7 +204,6 @@ def main():
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
-                'layers_unfrozen': total_unfrozen_layers,
                 'val_loss': avg_val_loss
             }, os.path.join(CHECKPOINT_DIR, f'checkpoint_epoch_{epoch+1}.pt'))
             best_val_loss = avg_val_loss
