@@ -20,7 +20,8 @@ class HandLandmarkModel(nn.Module):
 
         self.num_keypoints = num_keypoints
         self.grid_size = grid_size
-        self.output_channels = 1 + 4 + (2 * num_keypoints)
+        self.features_per_anchor = 1 + 4 + (2 * num_keypoints)
+        self.output_channels = self.features_per_anchor * 2
 
         self.backbone = nn.Sequential(
             ConvBlock(3, 32, 3, 1, 1),
@@ -29,7 +30,8 @@ class HandLandmarkModel(nn.Module):
             nn.MaxPool2d(2),  # 128 -> 64
             ConvBlock(64, 128, 3, 1, 1),
             nn.MaxPool2d(2),  # 64 -> 32
-            ConvBlock(128, 256, 3, 1, 1)
+            ConvBlock(128, 256, 3, 1, 1),
+            nn.MaxPool2d(2)
         )
 
         self.prediction_head = nn.Conv2d(256, self.output_channels, kernel_size=1)
@@ -37,14 +39,15 @@ class HandLandmarkModel(nn.Module):
     def forward(self, x):
         batch_size = x.size(0)
 
-        x = self.backbone(x)                          # Shape: [B, 256, S, S] (e.g., [B, 256, 32, 32])
+        x = self.backbone(x)                          # Shape: [B, 256, S, S]
         x = self.prediction_head(x)                   # Shape: [B, output_channels, S, S]
         x = x.permute(0, 2, 3, 1)                     # Shape: [B, S, S, output_channels]
 
+        x = x.view(batch_size, x.size(1), x.size(2), self.num_anchors, self.features_per_anchor)          # Shape: [B, S, S, num_anchors, features_per_anchor]
 
-        confidence = torch.sigmoid(x[..., 0:1])        # [B, S, S, 1]
-        rest = x[..., 1:]                              # [B, S, S, C-1]
+        confidence = torch.sigmoid(x[..., 0:1])       # [B, S, S, num_anchors, 1]
+        rest = x[..., 1:]                             # [B, S, S, num_anchors, features_per_anchor - 1]
 
-        x = torch.cat([confidence, rest], dim=-1)   
+        x = torch.cat([confidence, rest], dim=-1)     # [B, S, S, num_anchors, features_per_anchor]
 
-        return x  # Each cell contains: [confidence, cx, cy, w, h, keypoints...]
+        return x

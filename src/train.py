@@ -95,7 +95,10 @@ def main():
     with open(hp.FILTERED_ANNOTATIONS_PATH, 'r') as f:
         full_data = json.load(f)
 
-    keys = list(full_data.keys())
+    image_files = [os.path.join(hp.DATASET_PATH, image_file) for image_file in list(full_data.keys())]
+
+    print(image_files)
+    return 
 
     hand_labels = [
         int(full_data[k]["left_hand_valid"] or full_data[k]["right_hand_valid"])
