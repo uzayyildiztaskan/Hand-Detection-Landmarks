@@ -37,6 +37,7 @@ def filter_annotations(config, non_valid_image_split=0.3):
                 "width": image_info['width'],
                 "coco_url": image_info['coco_url'],
                 "image_id": image_id,
+                "has_valid_hands": False,
                 "hand_annotations": {}
             }
 
@@ -47,9 +48,13 @@ def filter_annotations(config, non_valid_image_split=0.3):
 
                     filtered_annotations_json[image_id] = no_hand_images_json.pop(image_id)
 
+                    filtered_annotations_json[image_id]['has_valid_hands'] = True
+
                     num_no_hand_images -= 1
 
-                elif not image_id in filtered_annotations_json.keys():  
+                elif not image_id in filtered_annotations_json.keys():
+
+                    value_image['has_valid_hands'] = True 
 
                     filtered_annotations_json[image_id] = value_image
 
