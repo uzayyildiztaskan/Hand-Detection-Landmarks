@@ -20,7 +20,8 @@ class HandLandmarkModel(nn.Module):
 
         self.num_keypoints = num_keypoints
         self.grid_size = grid_size
-        self.features_per_anchor = 1 + 4 + (2 * num_keypoints)
+        self.num_anchors = 2
+        self.features_per_anchor = 1 + 4 + (3 * num_keypoints)
         self.output_channels = self.features_per_anchor * 2
 
         self.backbone = nn.Sequential(

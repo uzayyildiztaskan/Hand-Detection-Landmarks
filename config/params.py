@@ -13,8 +13,6 @@ class Config:
         self.EPOCHS = epochs
         self.BATCH_SIZE = batch_size
         self.LEARNING_RATE = learning_rate
-        self.ALPHA = alpha
-        self.BETA = beta
         
         self.DATASET_PATH = dataset_path
         self.CHECKPOINT_DIR = checkpoint_dir

@@ -12,18 +12,17 @@ from torchvision import transforms
 from config.params import Config
 import numpy as np
 from sklearn.model_selection import train_test_split
-from data.preprocess import convert_to_2d
 from data.process_annotations import filter_annotations
 from data.dataset_download import download_filtered_dataset
 from src.model.landmarkmodel import HandLandmarkModel
-from src.utils.losses.custom_loss_functions import detection_loss, keypoint_loss
+from src.utils.losses.custom_loss_function import detection_loss
 from src.utils.accuracy.custom_accuracies import compute_iou, compute_pck
 from data.wholebodydataset import COCOWholeBodyHandDataset
 import argparse
 import matplotlib as plt
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-import torch.nn as nn
 import json
+import torch.nn.functional as F
 
 
 def main():
@@ -57,7 +56,8 @@ def main():
 
     images = os.listdir(hp.IMAGES_PATH)
 
-    hand_labels = [int(full_data[os.path.splitext(image)[0]]['has_valid_hands']) for image in images]
+    filtered_images = [os.path.splitext(img)[0] for img in images if os.path.splitext(img)[0] in full_data]
+    hand_labels = [int(full_data[os.path.splitext(img)[0]]['has_valid_hands']) for img in filtered_images]
 
     train_images, val_images = train_test_split(images, test_size=0.2, random_state=42, stratify=hand_labels)
 
@@ -70,6 +70,7 @@ def main():
     train_dataset = COCOWholeBodyHandDataset(
         image_folder=hp.IMAGES_PATH,
         image_files=train_images,
+        annotation_file=hp.FILTERED_ANNOTATIONS_PATH,
         transform=transform,
         target_size=(512, 512)
     )
@@ -77,11 +78,12 @@ def main():
     val_dataset = COCOWholeBodyHandDataset(
         image_folder=hp.IMAGES_PATH,
         image_files=val_images,
+        annotation_file=hp.FILTERED_ANNOTATIONS_PATH,
         transform=transform,
         target_size=(512, 512)
     )
 
-    train_loader = DataLoader(train_dataset, batch_size=hp.BATCH_SIZE, shuffle=True, num_workers=4, pin_memory=True)
+    train_loader = DataLoader(train_dataset, batch_size=hp.BATCH_SIZE, shuffle=True, num_workers=0, pin_memory=False)
     val_loader = DataLoader(val_dataset, batch_size=hp.BATCH_SIZE, shuffle=False)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -99,8 +101,6 @@ def main():
         optimizer = optim.Adam(model.parameters(), lr=hp.LEARNING_RATE)
         scheduler = ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
 
-    ALPHA = hp.ALPHA
-    BETA = hp.BETA
     EPOCHS = hp.EPOCHS
     CHECKPOINT_DIR = hp.CHECKPOINT_DIR
 
@@ -123,18 +123,22 @@ def main():
 
         debug_var = 0
 
-        for imgs, bboxes, keypoints in pbar:
-            imgs, bboxes, keypoints = imgs.to(device), bboxes.to(device), keypoints.to(device)
+        for imgs, confidences, bboxes, keypoints in pbar:
+            imgs, confidences, bboxes, keypoints = imgs.to(device), confidences.to(device), bboxes.to(device), keypoints.to(device)
             
             optimizer.zero_grad()
-            pred_bboxes, pred_keypoints = model(imgs)
+            preds = model(imgs)
+
+            pred_confidences = preds[..., 0:1]
+            pred_bboxes = preds[..., 1:5]
+            pred_keypoints = preds[..., 5:]
 
             pred_bboxes_scaled = pred_bboxes * 512
             pred_keypoints_scaled = pred_keypoints * 512
-            
-            loss_det = detection_loss(pred_bboxes_scaled, bboxes)
-            loss_kp = keypoint_loss(pred_keypoints_scaled, keypoints)
-            loss = ALPHA * loss_det + BETA * loss_kp
+
+            preds = torch.cat([pred_confidences, pred_bboxes_scaled, pred_keypoints_scaled], dim=-1)
+
+            loss, loss_det = detection_loss(preds, confidences, bboxes, keypoints)
             
             loss.backward()
             optimizer.step()
@@ -166,17 +170,17 @@ def main():
         epoch_val_iou, epoch_val_pck = 0, 0
 
         with torch.no_grad():
-            for imgs, bboxes, keypoints in val_loader:
-                imgs, bboxes, keypoints = imgs.to(device), bboxes.to(device), keypoints.to(device)
+            for imgs, confidences, bboxes, keypoints in val_loader:
+                imgs, confidences, bboxes, keypoints = imgs.to(device), confidences.to(device), bboxes.to(device), keypoints.to(device)
                 
-                pred_bboxes, pred_keypoints = model(imgs)
+                pred_confidences, pred_bboxes, pred_keypoints = model(imgs)
 
                 pred_bboxes_scaled = pred_bboxes * 512
                 pred_keypoints_scaled = pred_keypoints * 512
-                
-                loss_det = detection_loss(pred_bboxes_scaled, bboxes)
-                loss_kp = keypoint_loss(pred_keypoints_scaled, keypoints)
-                loss = ALPHA * loss_det + BETA * loss_kp
+
+                preds = torch.cat([pred_confidences, pred_bboxes_scaled, pred_keypoints_scaled], dim=-1)
+
+                loss, loss_det = detection_loss(preds, confidences, bboxes, keypoints)
                 
                 val_total_loss += loss.item()
                 epoch_val_iou += compute_iou(pred_bboxes_scaled, bboxes)

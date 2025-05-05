@@ -13,6 +13,7 @@ class COCOWholeBodyHandDataset(Dataset):
         self.image_files = image_files
         self.transform = transform
         self.target_width, self.target_height = target_size
+        self.grid_size = grid_size
         
         with open(annotation_file, 'r') as f:
             self.annotations = json.load(f)
@@ -39,7 +40,7 @@ class COCOWholeBodyHandDataset(Dataset):
         target = torch.zeros((S, S, self.num_anchors, self.features_per_anchor), dtype=torch.float32)
 
         # Iterate through each person in the image
-        for person_hands in annotation.values():
+        for person_hands in annotation['hand_annotations'].values():
 
             for anchor_idx, (valid_key, box_key, kpts_key) in enumerate([
                 ('left_hand_valid', 'lefthand_box', 'lefthand_kpts'),

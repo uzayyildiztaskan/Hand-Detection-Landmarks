@@ -18,6 +18,8 @@ def filter_annotations(config, non_valid_image_split=0.3):
         image_id = annotation['image_id']
 
         image_info = next((img for img in data['images'] if img['id'] == image_id), None)
+
+        image_id = f"{annotation['image_id']:012d}"
         
         if image_info:
             key = f"{person_id:06d}"
